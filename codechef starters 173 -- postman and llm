@@ -1,0 +1,122 @@
+MOD = 998244353
+MAX_N = 210000
+
+fact = [1] * (MAX_N + 1)
+invfact = [1] * (MAX_N + 1)
+
+
+def modexp(base, exp, mod):
+    result = 1 % mod
+    base %= mod
+    while exp > 0:
+        if exp & 1:
+            result = (result * base) % mod
+        base = (base * base) % mod
+        exp >>= 1
+    return result
+
+
+def precomputeFactorials():
+    for i in range(1, MAX_N + 1):
+        fact[i] = (fact[i - 1] * i) % MOD
+    invfact[MAX_N] = modexp(fact[MAX_N], MOD - 2, MOD)
+    for i in range(MAX_N - 1, -1, -1):
+        invfact[i] = (invfact[i + 1] * (i + 1)) % MOD
+
+
+def nCr(n, r):
+    if r < 0 or r > n:
+        return 0
+    return (fact[n] * invfact[r] % MOD) * invfact[n - r] % MOD
+
+
+class Sig:
+    def __init__(self, L, cntL, R, cntR):
+        self.L = L
+        self.cntL = cntL
+        self.R = R
+        self.cntR = cntR
+
+    def __eq__(self, other):
+        return (self.L == other.L and self.cntL == other.cntL and 
+                self.R == other.R and self.cntR == other.cntR)
+
+
+class SigHash:
+    def __call__(self, s):
+        res = 17
+        res = res * 31 + hash(s.L)
+        res = res * 31 + hash(s.cntL)
+        res = res * 31 + hash(s.R)
+        res = res * 31 + hash(s.cntR)
+        return res
+
+
+def main():
+    precomputeFactorials()
+
+    T = int(input())
+    for _ in range(T):
+        N, M = map(int, input().split())
+        d = list(map(int, input().split()))
+
+        d.sort()
+
+        prefix = [0] * (N + 1)
+        for i in range(N):
+            prefix[i + 1] = prefix[i] + d[i]
+
+        totalWindows = N - M + 1
+        fvals = [0] * totalWindows
+
+        f0 = 0
+        for j in range(M):
+            weight = 2 * j - (M - 1)
+            f0 += weight * d[j]
+        fvals[0] = f0
+
+        for i in range(totalWindows - 1):
+            term = fvals[i] - 2 * (prefix[i + M] - prefix[i + 1]) + ((M - 1) * (d[i + M] + d[i]))
+            fvals[i + 1] = term
+
+        best = min(fvals)
+
+        ansTravel = 2 * best
+
+        group = [0] * N
+        groupStart, groupEnd, groupFreq = [], [], []
+        currGroup = 0
+        groupStart.append(0)
+        group[0] = 0
+        for i in range(1, N):
+            if d[i] == d[i - 1]:
+                group[i] = currGroup
+            else:
+                groupEnd.append(i - 1)
+                groupFreq.append(i - groupStart[currGroup])
+                currGroup += 1
+                groupStart.append(i)
+                group[i] = currGroup
+        groupEnd.append(N - 1)
+        groupFreq.append(N - groupStart[currGroup])
+
+        sigMap = {}
+
+        for i in range(totalWindows):
+            if fvals[i] != best:
+                continue
+            L_idx, R_idx = i, i + M - 1
+            Lgrp, Rgrp = group[L_idx], group[R_idx]
+            s = Sig(Lgrp, M, Rgrp, M) if Lgrp == Rgrp else Sig(group[L_idx], groupEnd[Lgrp] - L_idx + 1, group[R_idx], R_idx - groupStart[Rgrp] + 1)
+
+            if s not in sigMap:
+                ways = nCr(groupFreq[s.L], s.cntL) * nCr(groupFreq[s.R], s.cntR) % MOD if s.L != s.R else nCr(groupFreq[s.L], M)
+                sigMap[s] = ways
+
+        totalWays = sum(sigMap.values()) % MOD
+
+        print(ansTravel, totalWays)
+
+
+if __name__ == "__main__":
+    main()
