@@ -1,0 +1,17 @@
+def result(a,b):
+    s = set()
+    for i in b:
+        if i in s:
+            print(1)
+            print(i)
+            return
+        s.add(i)
+    print(-1)
+
+t = int(input())
+i = 0
+while i < t:
+    n = int(input())
+    array = list(map(int, input().split()))
+    result(n, array)
+    i = i + 1
