@@ -1,0 +1,204 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define MOD 998244353
+#define MAXN 400005
+
+typedef struct {
+    int size;
+    int left_sum;
+    int right_sum;
+    int prod_sum;
+    int edge_prod;
+    int head;
+    int tail;
+} NodeData;
+
+typedef struct TreeNode {
+    int val;
+    int pos;
+    int priority;
+    NodeData data;
+    struct TreeNode *left, *right;
+} TreeNode;
+
+long long pow2[MAXN];
+
+void init_powers() {
+    pow2[0] = 1;
+    for(int i = 1; i < MAXN; i++) {
+        pow2[i] = (pow2[i-1] * 2LL) % MOD;
+    }
+}
+
+NodeData create_data(int val) {
+    NodeData data = {
+        .size = 1,
+        .left_sum = val % MOD,
+        .right_sum = val % MOD,
+        .prod_sum = 0,
+        .edge_prod = 0,
+        .head = val,
+        .tail = val
+    };
+    return data;
+}
+
+NodeData merge_data(NodeData left, NodeData right) {
+    NodeData result = {
+        .size = left.size + right.size,
+        .head = left.head,
+        .tail = right.tail
+    };
+    
+    result.left_sum = ((long long)left.left_sum * pow2[right.size] + right.left_sum) % MOD;
+    result.right_sum = (left.right_sum + (long long)right.right_sum * pow2[left.size]) % MOD;
+    result.prod_sum = ((long long)left.prod_sum + right.prod_sum + 
+                      (long long)left.left_sum * right.right_sum) % MOD;
+    result.edge_prod = ((long long)left.edge_prod + right.edge_prod + 
+                       (long long)left.tail * right.head) % MOD;
+    return result;
+}
+
+TreeNode* new_node(int val, int pos) {
+    TreeNode* node = (TreeNode*)malloc(sizeof(TreeNode));
+    node->val = val;
+    node->pos = pos;
+    node->priority = rand();
+    node->data = create_data(val);
+    node->left = node->right = NULL;
+    return node;
+}
+
+void update_node(TreeNode* node) {
+    if (!node) return;
+    
+    NodeData data = create_data(node->val);
+    if (node->left) {
+        data = merge_data(node->left->data, data);
+    }
+    if (node->right) {
+        data = merge_data(data, node->right->data);
+    }
+    node->data = data;
+}
+
+void split(TreeNode* root, TreeNode** left, TreeNode** right, int val, int pos) {
+    if (!root) {
+        *left = *right = NULL;
+        return;
+    }
+    
+    if (root->val < val || (root->val == val && root->pos < pos)) {
+        *left = root;
+        split(root->right, &((*left)->right), right, val, pos);
+        update_node(*left);
+    } else {
+        *right = root;
+        split(root->left, left, &((*right)->left), val, pos);
+        update_node(*right);
+    }
+}
+
+TreeNode* merge(TreeNode* left, TreeNode* right) {
+    if (!left || !right) return left ? left : right;
+    
+    if (left->priority > right->priority) {
+        left->right = merge(left->right, right);
+        update_node(left);
+        return left;
+    } else {
+        right->left = merge(left, right->left);
+        update_node(right);
+        return right;
+    }
+}
+
+TreeNode* insert(TreeNode* root, TreeNode* node) {
+    if (!root) return node;
+    
+    if (node->priority > root->priority) {
+        TreeNode *left, *right;
+        split(root, &left, &right, node->val, node->pos);
+        node->left = left;
+        node->right = right;
+        update_node(node);
+        return node;
+    }
+    
+    if (node->val < root->val || (node->val == root->val && node->pos < root->pos)) {
+        root->left = insert(root->left, node);
+    } else {
+        root->right = insert(root->right, node);
+    }
+    update_node(root);
+    return root;
+}
+
+TreeNode* remove_node(TreeNode* root, int val, int pos) {
+    if (!root) return NULL;
+    
+    if (root->val == val && root->pos == pos) {
+        TreeNode* temp = merge(root->left, root->right);
+        free(root);
+        return temp;
+    }
+    
+    if (val < root->val || (val == root->val && pos < root->pos)) {
+        root->left = remove_node(root->left, val, pos);
+    } else {
+        root->right = remove_node(root->right, val, pos);
+    }
+    update_node(root);
+    return root;
+}
+
+void cleanup(TreeNode* root) {
+    if (!root) return;
+    cleanup(root->left);
+    cleanup(root->right);
+    free(root);
+}
+
+int main() {
+    srand(time(NULL));
+    init_powers();
+    
+    int tests;
+    scanf("%d", &tests);
+    
+    while (tests--) {
+        int n, q;
+        scanf("%d %d", &n, &q);
+        
+        int* values = (int*)malloc((n + 1) * sizeof(int));
+        TreeNode* root = NULL;
+        
+        for (int i = 0; i < n; i++) {
+            scanf("%d", &values[i]);
+            root = insert(root, new_node(values[i], i));
+        }
+        
+        int result = root ? (root->data.prod_sum + root->data.edge_prod) % MOD : 0;
+        printf("%d\n", result);
+        
+        for (int i = 0; i < q; i++) {
+            int pos, new_val;
+            scanf("%d %d", &pos, &new_val);
+            pos--;
+            
+            root = remove_node(root, values[pos], pos);
+            values[pos] = new_val;
+            root = insert(root, new_node(new_val, pos));
+            
+            result = (root->data.prod_sum + root->data.edge_prod) % MOD;
+            printf("%d\n", result);
+        }
+        
+        free(values);
+        cleanup(root);
+    }
+    
+    return 0;
+}
