@@ -1,0 +1,229 @@
+MOD = 1000000007
+base = 137
+
+class Solution:
+    def __init__(self):
+        self.powers = []
+        self.F = []
+        self.bestB = []
+        self.bestB_dbl = []
+        self.bestBPrefix = []
+        self.tree = []
+
+    def precompute(self, maxLen):
+        self.powers = [0] * (maxLen + 1)
+        self.powers[0] = 1
+        i = 1
+        while i <= maxLen:
+            self.powers[i] = (self.powers[i - 1] * base) % MOD
+            i += 1
+
+    def modSub(self, a, b):
+        res = a - b
+        res %= MOD
+        if res < 0:
+            res += MOD
+        return res
+
+    class Node:
+        def __init__(self):
+            self.l = 0
+            self.r = 0
+            self.hash = 0
+            self.lazy = False
+            self.lazy_offset = 0
+
+    def build(self, idx, l, r):
+        self.tree[idx].l = l
+        self.tree[idx].r = r
+        self.tree[idx].lazy = False
+        if l == r:
+            self.tree[idx].hash = self.F[l] % MOD
+        else:
+            mid = (l + r) // 2
+            self.build(2 * idx, l, mid)
+            self.build(2 * idx + 1, mid + 1, r)
+            rightLen = self.tree[2 * idx + 1].r - self.tree[2 * idx + 1].l + 1
+            self.tree[idx].hash = (self.tree[2 * idx].hash * self.powers[rightLen] + self.tree[2 * idx + 1].hash) % MOD
+
+    def pushDown(self, idx):
+        if not self.tree[idx].lazy:
+            return
+        l, r = self.tree[idx].l, self.tree[idx].r
+        if l == r:
+            self.tree[idx].lazy = False
+            return
+        mid = (l + r) // 2
+        left, right = 2 * idx, 2 * idx + 1
+        leftLen = mid - l + 1
+        rightLen = r - mid
+
+        self.tree[left].lazy = True
+        self.tree[left].lazy_offset = self.tree[idx].lazy_offset
+        self.tree[left].hash = self.getBestBHash(self.tree[idx].lazy_offset, leftLen)
+
+        self.tree[right].lazy = True
+        self.tree[right].lazy_offset = self.tree[idx].lazy_offset + leftLen
+        self.tree[right].hash = self.getBestBHash(self.tree[idx].lazy_offset + leftLen, rightLen)
+
+        self.tree[idx].lazy = False
+
+    def update(self, idx, ql, qr, offset):
+        l, r = self.tree[idx].l, self.tree[idx].r
+        if ql <= l and r <= qr:
+            len_ = r - l + 1
+            self.tree[idx].lazy = True
+            self.tree[idx].lazy_offset = offset + (l - ql)
+            self.tree[idx].hash = self.getBestBHash(self.tree[idx].lazy_offset, len_)
+            return
+        self.pushDown(idx)
+        mid = (l + r) // 2
+        if ql <= mid:
+            self.update(2 * idx, ql, qr, offset)
+        if qr > mid:
+            self.update(2 * idx + 1, ql, qr, offset)
+        rightLen = self.tree[2 * idx + 1].r - self.tree[2 * idx + 1].l + 1
+        self.tree[idx].hash = (self.tree[2 * idx].hash * self.powers[rightLen] + self.tree[2 * idx + 1].hash) % MOD
+
+    def query(self, idx, ql, qr):
+        l, r = self.tree[idx].l, self.tree[idx].r
+        if ql <= l and r <= qr:
+            return self.tree[idx].hash
+        self.pushDown(idx)
+        mid = (l + r) // 2
+        if qr <= mid:
+            return self.query(2 * idx, ql, qr)
+        elif ql > mid:
+            return self.query(2 * idx + 1, ql, qr)
+        else:
+            leftHash = self.query(2 * idx, ql, mid)
+            rightHash = self.query(2 * idx + 1, mid + 1, qr)
+            rightLen = qr - mid
+            return (leftHash * self.powers[rightLen] + rightHash) % MOD
+
+    def getValue(self, idx, pos):
+        l, r = self.tree[idx].l, self.tree[idx].r
+        if l == r:
+            if self.tree[idx].lazy:
+                return self.bestB_dbl[self.tree[idx].lazy_offset]
+            return int(self.tree[idx].hash)
+        self.pushDown(idx)
+        mid = (l + r) // 2
+        if pos <= mid:
+            return self.getValue(2 * idx, pos)
+        else:
+            return self.getValue(2 * idx + 1, pos)
+
+    def collect(self, idx, result):
+        l, r = self.tree[idx].l, self.tree[idx].r
+        if l == r:
+            result[l] = self.getValue(idx, l)
+            return
+        self.pushDown(idx)
+        self.collect(2 * idx, result)
+        self.collect(2 * idx + 1, result)
+
+    def computeBestRotation(self, B):
+        n = len(B)
+        s = [0] * (2 * n)
+        i = 0
+        while i < n:
+            s[i] = B[i]
+            s[i + n] = B[i]
+            i += 1
+        best = 0
+        i = 1
+        while i < n and best < n:
+            j = 0
+            while j < n and s[best + j] == s[i + j]:
+                j += 1
+            if j >= n:
+                break
+            if s[best + j] <= s[i + j]:
+                i = i + j + 1
+            else:
+                best = max(best + j + 1, i)
+                i = best + 1
+        res = [0] * n
+        i = 0
+        while i < n:
+            res[i] = B[(best + i) % n]
+            i += 1
+        return res
+
+    def getBestBHash(self, offset, length):
+        h = self.modSub(self.bestBPrefix[offset + length], (self.bestBPrefix[offset] * self.powers[length]) % MOD)
+        return h
+
+    def solve(self, T, test_cases):
+        self.precompute(400000)
+        result = []
+        i = 0
+        while i < T:
+            N, M, F, B = test_cases[i]
+            self.F = F
+            self.bestB = self.computeBestRotation(B)
+
+            self.bestB_dbl = self.bestB * 2
+
+            self.bestBPrefix = [0] * (2 * M + 1)
+            j = 0
+            while j < 2 * M:
+                self.bestBPrefix[j + 1] = (self.bestBPrefix[j] * base + self.bestB_dbl[j]) % MOD
+                j += 1
+
+            self.tree = [self.Node() for _ in range(4 * N)]
+            self.build(1, 0, N - 1)
+
+            j = 0
+            while j < N - M + 1:
+                hashF = self.query(1, j, j + M - 1)
+                hashB = self.getBestBHash(0, M)
+                if hashF == hashB:
+                    j += 1
+                    continue
+
+                lo, hi = 0, M
+                while lo < hi:
+                    mid = (lo + hi + 1) // 2
+                    hashSegment = self.query(1, j, j + mid - 1)
+                    hashBPrefix = self.getBestBHash(0, mid)
+                    if hashSegment == hashBPrefix:
+                        lo = mid
+                    else:
+                        hi = mid - 1
+
+                L = lo
+                if L < M:
+                    curVal = self.getValue(1, j + L)
+                    bestVal = self.bestB[L]
+                    if curVal > bestVal:
+                        self.update(1, j, j + M - 1, 0)
+
+                j += 1
+
+            res = [0] * N
+            self.collect(1, res)
+            result.append(res)
+            i += 1
+        return result
+
+T = int(input())
+tc = []
+i = 0
+while i < T:
+    N, M = map(int, input().split())
+    arr_a = list(map(int, input().split()))
+    arr_b = list(map(int, input().split()))
+    tc.append((N, M, arr_a, arr_b))
+    i += 1
+
+sol = Solution()
+results = sol.solve(T, tc)
+
+i = 0
+while i < len(results):
+    print(" ".join(map(str, results[i])))
+    i += 1
+
+
